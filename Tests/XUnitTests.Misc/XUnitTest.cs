@@ -2,14 +2,16 @@
 
 using System;
 using System.Linq;
+using ActiveMqLabs01.Common;
 using Tests.Common;
 using Xunit;
 
-public class XUnitTest : UnitTest
+public class XUnitTest : UnitTest, ICommonTest
 {
     [Fact]
-    public void CanDoSomething()
+    public void CanResolveMessageProducer()
     {
-        Assert.False(true, "TODO:(B81ISE/20220302) Complete test CanDoSomething");
+        var inst = Resolve<MessageProducer>();
+        Assert.NotNull(inst);
     }
 }

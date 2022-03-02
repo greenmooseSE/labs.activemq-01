@@ -9,7 +9,7 @@
 
     public abstract class UnitTest
     {
-        private static readonly ServiceProvider _serviceProvider;
+        private static readonly IServiceProvider _serviceProvider;
 
         ///<summary>One-time only construction logic.</summary>
         // [ExcludeFromCodeCoverage]
@@ -17,19 +17,18 @@
         {
             var services = new ServiceCollection();
             var endpoints = new[] {Endpoint.Create(host: "localhost", port: 5672, "admin", "admin")};
-            services.AddActiveMq("bookstore-cluster", endpoints);
+            var activeMqBuilder = services.AddActiveMq("bookstore-cluster", endpoints);
             services.AddActiveMqHostedService();
+            activeMqBuilder.AddAnonymousProducer<MessageProducer>();
 
-            _serviceProvider = services.BuildServiceProvider();
+            
+
+            _serviceProvider = activeMqBuilder.Services.BuildServiceProvider();
         }
 
-        private IServiceProvider ServiceProvider => _serviceProvider;
 
-        protected T Resolve<T>()
+        protected T Resolve<T>() where T : notnull
         {
-            string moo = "hej";
-            moo = null;
-
             return _serviceProvider.GetRequiredService<T>();
         }
     }

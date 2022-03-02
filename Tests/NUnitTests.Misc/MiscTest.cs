@@ -2,15 +2,19 @@
 
 using System;
 using System.Linq;
+using ActiveMQ.Artemis.Client.Extensions.DependencyInjection;
+using ActiveMqLabs01.Common;
 using NUnit.Framework;
+using Tests.Common;
 
 [TestFixture]
-internal class MiscTest : NUnitTest
+internal class MiscTest : NUnitTest, ICommonTest
 {
+ 
     [Test]
-    public void CanDoSomething()
+    public void CanResolveMesageProducer()
     {
-
-        Assert.Fail("TODO:(B81ISE/20220302) Complete test CanDoSomething");
+        var inst = Resolve<MessageProducer>();
+        Assert.IsNotNull(inst);
     }
 }
