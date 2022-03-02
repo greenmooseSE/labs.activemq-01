@@ -5,6 +5,7 @@
     using ActiveMQ.Artemis.Client;
     using ActiveMQ.Artemis.Client.Extensions.DependencyInjection;
     using ActiveMQ.Artemis.Client.Extensions.Hosting;
+    using ActiveMqLabs01.Common;
     using Microsoft.Extensions.DependencyInjection;
 
     public abstract class UnitTest
@@ -20,7 +21,7 @@
             var activeMqBuilder = services.AddActiveMq("bookstore-cluster", endpoints);
             services.AddActiveMqHostedService();
             activeMqBuilder.AddAnonymousProducer<MessageProducer>();
-
+            
             
 
             _serviceProvider = activeMqBuilder.Services.BuildServiceProvider();

@@ -11,6 +11,7 @@ public class MessageProducer
 
     public MessageProducer(IAnonymousProducer producer)
     {
+        Console.WriteLine($"producer type: {producer.GetType().FullName}");
         _producer = producer;
     }
 
