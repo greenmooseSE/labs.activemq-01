@@ -7,11 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="XUnit" Version="2.4.1" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\Tests.Common\Tests.Common.csproj" />
+    <ProjectReference Include="..\..\Src\ActiveMqLabs01.Common\ActiveMqLabs01.Common.csproj" />
   </ItemGroup>
 
 </Project>
