@@ -5,15 +5,21 @@ VisualStudioVersion = 17.0.32002.185
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XUnitTests.Misc", "Tests\XUnitTests.Misc\XUnitTests.Misc.csproj", "{FC1EF6B5-F24A-43E8-9D10-DE7BF991BD35}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NUnitTests.Misc", "Tests\NUnitTests.Misc\NUnitTests.Misc.csproj", "{83921307-2468-450F-A15F-E5D1F9F009DF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NUnitTests.Misc", "Tests\NUnitTests.Misc\NUnitTests.Misc.csproj", "{83921307-2468-450F-A15F-E5D1F9F009DF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ActiveMqLabs01.Common", "Src\ActiveMqLabs01.Common\ActiveMqLabs01.Common.csproj", "{15A0BA0B-6959-4EEF-8101-7BBC76A7AEE1}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ActiveMqLabs01.Common", "Src\ActiveMqLabs01.Common\ActiveMqLabs01.Common.csproj", "{15A0BA0B-6959-4EEF-8101-7BBC76A7AEE1}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "01. Src", "01. Src", "{F442E6C7-0A3C-423D-936E-FA1CF6D624ED}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "02. Test", "02. Test", "{9AB883E0-8A1D-483A-9925-19ECDB71EA2C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests.Common", "Tests\Tests.Common\Tests.Common.csproj", "{18E941CD-D9E5-4402-901B-92FF75B43D57}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Tests.Common", "Tests\Tests.Common\Tests.Common.csproj", "{18E941CD-D9E5-4402-901B-92FF75B43D57}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{DCDF18E6-581F-439A-A0A0-782C044CE768}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+		Directory.Build.props = Directory.Build.props
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

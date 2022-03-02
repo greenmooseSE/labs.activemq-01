@@ -10,7 +10,7 @@ internal class MiscTest : NUnitTest
     [Test]
     public void CanDoSomething()
     {
-        var
+
         Assert.Fail("TODO:(B81ISE/20220302) Complete test CanDoSomething");
     }
 }
