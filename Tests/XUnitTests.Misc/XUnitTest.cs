@@ -14,4 +14,5 @@ public class XUnitTest : UnitTest, ICommonTest
         var inst = Resolve<MessageProducer>();
         Assert.NotNull(inst);
     }
+
 }

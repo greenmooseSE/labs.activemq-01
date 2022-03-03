@@ -5,6 +5,6 @@
 
     public interface ICommonTest
     {
-        void CanResolveIActiveMqBuilder();
+        void CanResolveMessageProducer();
     }
 }

@@ -26,6 +26,7 @@ internal class MiscTest : NUnitTest, ICommonTest
     [TearDown]
     public async Task MiscTestTearDown()
     {
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalse
         if (_connection != null)
         {
             await _connection.DisposeAsync();
@@ -40,6 +41,7 @@ internal class MiscTest : NUnitTest, ICommonTest
         }
 
         _consumer = null;
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalse
         if (_producer != null)
         {
             await _producer.DisposeAsync();
@@ -60,22 +62,41 @@ internal class MiscTest : NUnitTest, ICommonTest
         Assert.IsNotNull(inst);
     }
 
-    /// <summary>
-    ///     NonDurable locally is 1ms and durable is 3ms
-    /// </summary>
+
+    [Test]
+    public async Task CanSendAndReceiveAMessage()
+    {
+        var msgReceived = "";
+        var consumerTask = Task.Run(async () =>
+        {
+            Message? msg = await _consumer.ReceiveAsync();
+            msgReceived = $"Got message {JsonSerializer.Serialize(msg)}";
+            Console.WriteLine(msgReceived);
+        });
+        await _producer.SendAsync(new Message(JsonSerializer.Serialize(new {foo = "bar"}))
+        {
+            CorrelationId = "Test01",
+            CreationTime = DateTime.Now,
+            DurabilityMode = DurabilityMode.Durable,
+        });
+
+        await consumerTask;
+
+        StringAssert.Contains("Test01", msgReceived);
+    }
+
     [Test]
     public async Task NonDurableVsDurable()
     {
         for (var i = 0; i < 10; ++i)
         {
             var sw1 = Stopwatch.StartNew();
-            _producer.SendAsync(new Message(JsonSerializer.Serialize(new {foo = "bar"}))
-                {
-                    CorrelationId = "Test01",
-                    CreationTime = DateTime.Now,
-                    DurabilityMode = DurabilityMode.Nondurable
-                })
-                .Wait();
+            await _producer.SendAsync(new Message(JsonSerializer.Serialize(new {foo = "bar"}))
+            {
+                CorrelationId = "Test01",
+                CreationTime = DateTime.Now,
+                DurabilityMode = DurabilityMode.Nondurable
+            });
             sw1.Stop();
 
             var sw2 = Stopwatch.StartNew();
@@ -88,8 +109,7 @@ internal class MiscTest : NUnitTest, ICommonTest
             sw2.Stop();
 
 
-            Console.WriteLine(
-                $"Nondurable: {sw1.ElapsedMilliseconds:N} Durable: {sw2.ElapsedMilliseconds:N}");
+            Console.WriteLine($"sw1: {sw1.ElapsedMilliseconds:N} sw1: {sw2.ElapsedMilliseconds:N}");
         }
     }
 }
