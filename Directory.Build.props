@@ -1,0 +1,33 @@
+<Project>
+
+  <!-- Compile settings -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsAsErrors />
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <!--<langversion>latest</langversion>-->
+    <!--10: .net 6-->
+    <langversion>10</langversion>
+  </PropertyGroup>
+
+  <!-- Version data -->
+  <PropertyGroup>
+    <Company>GMD Labs</Company>
+    <Authors>$(Company)</Authors>
+    <Copyright>Copyright © $(Company) $([System.DateTime]::Now.Year)</Copyright>
+    <Product>Application Authorization Api</Product>
+    <Description>Labs 01 for ActiveMq Artemis</Description>
+    <VersionPrefix>0.0.1</VersionPrefix>
+    <BuildNumber>123</BuildNumber>
+    <VersionSuffix>-undefined</VersionSuffix>
+    <!-- For som reason this ends up as file descripton -->
+    <AssemblyTitle>ActiveMqLabs01</AssemblyTitle>
+    <!-- AssemblyVersion does not seem to be used anywhere -->
+    <!-- <AssemblyVersion>$(VersionPrefix)</AssemblyVersion> -->
+    <FileVersion>$(VersionPrefix).$(BuildNumber)</FileVersion>
+    <InformationalVersion>$(VersionPrefix)$(VersionSuffix)</InformationalVersion>
+  </PropertyGroup>
+</Project>
