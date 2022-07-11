@@ -7,6 +7,7 @@
     using ActiveMQ.Artemis.Client.Extensions.Hosting;
     using ActiveMqLabs01.Common;
     using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.Logging;
 
     public abstract class UnitTest
     {
@@ -31,6 +32,17 @@
         protected T Resolve<T>() where T : notnull
         {
             return _serviceProvider.GetRequiredService<T>();
+        }
+
+        protected void LogDebug(string message)
+        {
+            Log(message, LogLevel.Debug);
+        }
+
+        private void Log(string message, LogLevel logLevel)
+        {
+            var timestamp = DateTime.Now.ToString("hh:mm:ss.fff");
+            Console.WriteLine($"[{timestamp}] {logLevel} {message}");
         }
     }
 }
