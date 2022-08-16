@@ -1,12 +1,9 @@
 ﻿namespace NUnitTests.Misc;
 
-using System;
 using System.Diagnostics;
-using System.Linq;
 using System.Text.Json;
 using System.Transactions;
 using ActiveMQ.Artemis.Client;
-using ActiveMqLabs01.Common;
 using NUnit.Framework;
 using Tests.Common;
 using Transaction = ActiveMQ.Artemis.Client.Transactions.Transaction;
@@ -18,7 +15,7 @@ internal class MiscTest : NUnitTest, ICommonTest
     [SetUp]
     public async Task MiscTestSetUp()
     {
-        Endpoint[] endpoints = {Endpoint.Create(host: "localhost", port: 5672, "admin", "admin")};
+        Endpoint[] endpoints = {Endpoint.Create("localhost", 5672, "admin", "admin")};
         _connectionFactory = new ConnectionFactory();
         _connection = await _connectionFactory.CreateAsync(endpoints);
 
@@ -54,21 +51,12 @@ internal class MiscTest : NUnitTest, ICommonTest
         _producer = null!;
     }
 
-    private ConnectionFactory _connectionFactory = null!;
     private IConnection _connection = null!;
+
+    private ConnectionFactory _connectionFactory = null!;
     private IConsumer _consumer = null!;
     private IProducer _producer = null!;
     private string _queueName = "";
-
-    private async Task SendMsg(string msgContent = "bar")
-    {
-        await _producer.SendAsync(new Message(JsonSerializer.Serialize(new {foo = msgContent}))
-        {
-            CorrelationId = "Test01",
-            CreationTime = DateTime.Now,
-            DurabilityMode = DurabilityMode.Durable,
-        });
-    }
 
     private async Task<string?> ReceiveMsg(TimeSpan? timeout = null)
     {
@@ -96,12 +84,20 @@ internal class MiscTest : NUnitTest, ICommonTest
         // }
     }
 
-    [Test]
-    public void CanResolveMessageProducer()
+    private async Task SendMsg(string msgContent = "bar")
     {
-        MessageProducer inst = Resolve<MessageProducer>();
-        Assert.IsNotNull(inst);
+        await _producer.SendAsync(new Message(JsonSerializer.Serialize(new {foo = msgContent}))
+        {
+            CorrelationId = "Test01", CreationTime = DateTime.Now, DurabilityMode = DurabilityMode.Durable
+        });
     }
+
+    // [Test]
+    // public void CanResolveMessageProducer()
+    // {
+    //     MessageProducer inst = Resolve<MessageProducer>();
+    //     Assert.IsNotNull(inst);
+    // }
 
 
     [Test]
@@ -116,9 +112,7 @@ internal class MiscTest : NUnitTest, ICommonTest
         });
         await _producer.SendAsync(new Message(JsonSerializer.Serialize(new {foo = "bar"}))
         {
-            CorrelationId = "Test01",
-            CreationTime = DateTime.Now,
-            DurabilityMode = DurabilityMode.Durable,
+            CorrelationId = "Test01", CreationTime = DateTime.Now, DurabilityMode = DurabilityMode.Durable
         });
 
         await consumerTask;
