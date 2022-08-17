@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
@@ -11,10 +11,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\RestApi.Common\RestApi.Common.csproj" />
-  </ItemGroup>
-  <ItemGroup>
     <InternalsVisibleTo Include="$(AssemblyName).Tests.HttpIntTests.Common" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="WebApiHelpers\" />
   </ItemGroup>
 
 </Project>

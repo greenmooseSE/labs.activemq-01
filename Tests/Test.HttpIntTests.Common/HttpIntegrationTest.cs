@@ -1,8 +1,11 @@
 ﻿namespace Test.HttpIntTests.Common;
 
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
+using RestApi.Common;
+using RestApi.Common.EnsureExtension;
 using Tests.Common;
-using Tests.Common.EnsureExtension;
 
 public abstract class HttpIntegrationTest : UnitTest
 {
@@ -15,6 +18,7 @@ public abstract class HttpIntegrationTest : UnitTest
     {
         if (_httpClient == null)
         {
+            _webApiRegHelper.OnRegisterServices += OnAppRegisterServices;
             _httpClient = NewHttpClient();
         }
     }
@@ -24,8 +28,19 @@ public abstract class HttpIntegrationTest : UnitTest
     #region Non-Public members
 
     private static HttpClient? _httpClient;
+    private static readonly WebApiRegistrationHelper _webApiRegHelper = new();
 
     protected abstract HttpClient NewHttpClient();
+
+    private void OnAppRegisterServices(IServiceCollection services)
+    {
+        services.AddLogging(cfg =>
+        {
+            cfg.ClearProviders();
+            cfg.SetMinimumLevel(LogLevel.Trace);
+            cfg.AddSimpleConsole();
+        });
+    }
 
     #endregion
 }

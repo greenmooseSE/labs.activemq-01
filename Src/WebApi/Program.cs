@@ -1,4 +1,6 @@
-﻿WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+﻿using WebApi.BackgroundServices;
+
+var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
@@ -7,7 +9,16 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-WebApplication app = builder.Build();
+//Background services
+builder.Services.AddHostedService<StatisticsBackgroundService>();
+
+var inst = RestApi.Common.WebApiRegistrationHelper.Instance;
+
+inst.RegisterServices(builder.Services);
+
+var app = builder.Build();
+
+
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -15,6 +26,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
 
 app.UseHttpsRedirection();
 

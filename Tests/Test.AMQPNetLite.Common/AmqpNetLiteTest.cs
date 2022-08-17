@@ -4,8 +4,8 @@ using System.Text;
 using Amqp;
 using Amqp.Framing;
 using NUnit.Framework;
+using RestApi.Common.EnsureExtension;
 using Tests.Common;
-using Tests.Common.EnsureExtension;
 
 [TestFixture]
 public abstract class AmqpNetLiteTest : UnitTest

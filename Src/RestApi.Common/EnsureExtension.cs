@@ -1,6 +1,11 @@
-﻿namespace Tests.Common
+﻿using System;
+using System.Linq;
+
+namespace RestApi.Common
 {
     using System;
+    using System;
+    using System.Linq;
     using System.Linq;
 
     namespace EnsureExtension
