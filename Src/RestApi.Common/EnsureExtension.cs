@@ -1,24 +1,11 @@
-﻿using System;
-using System.Linq;
-
-namespace RestApi.Common
+﻿namespace RestApi.Common
 {
-    using System;
-    using System;
-    using System.Linq;
-    using System.Linq;
-
     namespace EnsureExtension
     {
         public static class EnsureExtension
         {
-            public static void EnsureNull<T>(this T? src) where T : class
-            {
-                if (src != null)
-                {
-                    throw new InvalidOperationException("Expected value to be null.");
-                }
-            }
+            #region Public members
+
             public static T EnsureNotNull<T>(this T? src, string name = "") where T : class
             {
                 if (src == null)
@@ -28,6 +15,26 @@ namespace RestApi.Common
 
                 return src;
             }
+
+            public static Guid EnsureNotNull(this Guid? src, string name = "")
+            {
+                if (src == null)
+                {
+                    throw new ArgumentNullException(name);
+                }
+
+                return src.Value;
+            }
+
+            public static void EnsureNull<T>(this T? src)
+            {
+                if (src != null)
+                {
+                    throw new InvalidOperationException("Expected value to be null.");
+                }
+            }
+
+            #endregion
         }
     }
 }

@@ -10,7 +10,7 @@ public class HealthController : ControllerBase
 
     public string Get()
     {
-        _logger.LogDebug("GET /v1/health");
+        _logger.LogTrace("GET /v1/health");
         return "Healthy";
     }
 
