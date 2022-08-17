@@ -12,4 +12,13 @@ internal class MiscWebApiHttpIntTests : WebApiHttpIntTest
         HttpResponseMessage res = HttpClient.GetAsync("/v1/health").Result;
         res.EnsureSuccessStatusCode();
     }
+
+    [Test]
+    public void CanGetSwaggerJson()
+    {
+        HttpResponseMessage res = HttpClient.GetAsync("/swagger/v1/swagger.json").Result;
+        res.EnsureSuccessStatusCode();
+
+
+    }
 }

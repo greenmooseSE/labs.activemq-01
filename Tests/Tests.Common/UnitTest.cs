@@ -13,9 +13,13 @@ public abstract class UnitTest
     }
 
 
-    protected void LogDebug(string message)
+    protected virtual void LogDebug(string message)
     {
         Log(message, LogLevel.Debug);
+    }
+    protected virtual void LogInfo(string message)
+    {
+        Log(message, LogLevel.Information);
     }
 
     #endregion

@@ -12,29 +12,39 @@ public abstract class HttpIntegrationTest : UnitTest
 {
     #region Public members
 
+    public static IServiceProvider AppServiceProvider => _appServiceProvider.EnsureNotNull();
+
+    private bool DoLog => true;
+
+    protected virtual bool DoRegisterWebApiHostServices { get; } = false;
+
     protected HttpClient HttpClient => _httpClient.EnsureNotNull();
-
-    private bool DoLog
-    {
-        get
-        {
-            return true;
-        }
-    }
-
-    private LoggerScope? _loggerScope = null;
 
     [SetUp]
     public void HttpIntegrationTestSetUp()
     {
+        if (!_isInitialized)
+        {
+            _isInitialized = true;
+            _webApiRegHelper = (WebApiRegistrationHelper)WebApiRegistrationHelper.Instance;
+            if (DoRegisterWebApiHostServices)
+            {
+                _webApiRegHelper.DoRegisterHostedServices = true;
+            }
+            else
+            {
+                _webApiRegHelper.DoRegisterHostedServices = false;
+            }
+        }
+
         _loggerScope = MemoryLoggerManager.Instance.NewLogScope();
 
         if (_httpClient == null)
         {
             _webApiRegHelper.OnRegisterServices += OnAppRegisterServices;
+            _webApiRegHelper.OnRegisterServiceProvider += OnAppRegisterServiceProvider;
             _httpClient = NewHttpClient();
         }
-
     }
 
     [TearDown]
@@ -42,11 +52,10 @@ public abstract class HttpIntegrationTest : UnitTest
     {
         if (DoLog)
         {
-            var logs = _loggerScope.EnsureNotNull().AllLogs;
+            IReadOnlyList<LogEntry> logs = _loggerScope.EnsureNotNull().AllLogs;
             foreach (LogEntry log in logs)
             {
                 Console.WriteLine(log);
-
             }
         }
 
@@ -58,12 +67,40 @@ public abstract class HttpIntegrationTest : UnitTest
 
     #region Non-Public members
 
+    private static IServiceProvider? _appServiceProvider;
+
     private static HttpClient? _httpClient;
-    private static readonly WebApiRegistrationHelper _webApiRegHelper = new();
+    private static bool _isInitialized;
+
+    private LoggerScope? _loggerScope;
+    private static WebApiRegistrationHelper? _webApiRegHelper;
+
+    /// <inheritdoc />
+    protected override void LogDebug(string message)
+    {
+        ILogger<HttpIntegrationTest> logger =
+            AppServiceProvider.GetRequiredService<ILogger<HttpIntegrationTest>>();
+        logger.LogDebug(message);
+    }
+
+    /// <inheritdoc />
+    protected override void LogInfo(string message)
+    {
+        ILogger<HttpIntegrationTest> logger =
+            AppServiceProvider.GetRequiredService<ILogger<HttpIntegrationTest>>();
+        logger.LogInformation(message);
+    }
+
 
     protected abstract HttpClient NewHttpClient();
 
-    private void OnAppRegisterServices(IServiceCollection services)
+    private void OnAppRegisterServiceProvider(IServiceProvider serviceProvider)
+    {
+        _appServiceProvider.EnsureNull();
+        _appServiceProvider = serviceProvider;
+    }
+
+    protected virtual void OnAppRegisterServices(IServiceCollection services)
     {
         services.AddLogging(cfg =>
         {
@@ -82,11 +119,16 @@ public abstract class HttpIntegrationTest : UnitTest
 
 internal class MemoryLoggingProvider : ILoggerProvider
 {
+    #region IDisposable members
+
     /// <inheritdoc />
     public void Dispose()
     {
-        
     }
+
+    #endregion
+
+    #region ILoggerProvider members
 
     /// <inheritdoc />
     public ILogger CreateLogger(string categoryName)
@@ -95,28 +137,25 @@ internal class MemoryLoggingProvider : ILoggerProvider
         var logger = new MemoryLogger(categoryName, MemoryLoggerManager.Instance);
         return logger;
     }
+
+    #endregion
 }
 
 internal class LoggerScope : IDisposable
 {
-    private readonly MemoryLoggerManager _parent;
-    private readonly DateTimeOffset _started=DateTimeOffset.Now;
-    //private readonly Guid _scopeId;
-
-    private readonly ConcurrentBag<LogEntry> _logEntries = new ConcurrentBag<LogEntry>();
-
-    public LoggerScope(MemoryLoggerManager parent)
-    {
-        _parent = parent;
-    }
-
-    public IReadOnlyList<LogEntry> AllLogs => _logEntries.OrderBy(l => l.TimestampOffset).ToList();
+    #region IDisposable members
 
     /// <inheritdoc />
     public void Dispose()
     {
         _parent.RemoveLogScope();
     }
+
+    #endregion
+
+    #region Public members
+
+    public IReadOnlyList<LogEntry> AllLogs => _logEntries.OrderBy(l => l.TimestampOffset).ToList();
 
 
     public void AddLog<TState>(string category,
@@ -126,26 +165,48 @@ internal class LoggerScope : IDisposable
         Exception exception,
         Func<TState, Exception, string> formatter)
     {
-        var logEntry = new LogEntry((DateTimeOffset.Now-_started), category,  logLevel,formatter(state, exception));
+        var logEntry = new LogEntry(DateTimeOffset.Now - _started,
+            category,
+            logLevel,
+            formatter(state, exception));
         _logEntries.Add(logEntry);
     }
+
+    public LoggerScope(MemoryLoggerManager parent)
+    {
+        _parent = parent;
+    }
+
+    #endregion
+
+    #region Non-Public members
+
+    //private readonly Guid _scopeId;
+
+    private readonly ConcurrentBag<LogEntry> _logEntries = new();
+    private readonly MemoryLoggerManager _parent;
+    private readonly DateTimeOffset _started = DateTimeOffset.Now;
+
+    #endregion
 }
 
-class LogEntry
+internal class LogEntry
 {
-    public TimeSpan TimestampOffset { get; }
+    #region Public members
+
     public string Category { get; }
     public LogLevel LogLevel { get; }
     public string Text { get; }
-    public DateTimeOffset Timestamp { get; }=DateTimeOffset.Now;
+    public DateTimeOffset Timestamp { get; } = DateTimeOffset.Now;
+    public TimeSpan TimestampOffset { get; }
 
     /// <inheritdoc />
     public override string ToString()
     {
         var logLev = LogLevel.ToString().ToUpperInvariant();
-        var logLevAbbr = logLev.Substring(0,Math.Min(4,logLev.Length));
+        var logLevAbbr = logLev.Substring(0, Math.Min(4, logLev.Length));
         var categoryLen = Math.Min(15, Category.Length);
-        var categoryAbbr = Category.Substring(Category.Length-categoryLen,categoryLen);
+        var categoryAbbr = Category.Substring(Category.Length - categoryLen, categoryLen);
         return $"[{TimestampOffset:mm\\:ss\\.fff}] {logLevAbbr} {categoryAbbr} - {Text}";
     }
 
@@ -157,42 +218,15 @@ class LogEntry
         LogLevel = logLevel;
         Text = text;
     }
+
+    #endregion
 }
 
-class MemoryLoggerManager
+internal class MemoryLoggerManager
 {
-    public void RemoveLogScope()
-    {
-        if (_loggerScope==null)
-        {
-            Console.WriteLine("WARNING: Expected log scope to exist but it did not.");
-        }
-        else
-        {
-            _loggerScope = null;
-        }
-    }
-    // private Guid? _scopeId;
-    private MemoryLoggerManager()
-    {
+    #region Public members
 
-    }
-    public LoggerScope NewLogScope()
-    {
-        _loggerScope.EnsureNull();
-        _loggerScope = new LoggerScope(this);
-        // _scopeId.EnsureNull();
-        // _scopeId = Guid.NewGuid();
-        return _loggerScope;
-    }
-    public static MemoryLoggerManager Instance { get;  } = new ();
-
-    
-    //
-    // private static ConcurrentDictionary<Guid, LoggerScope> _logEntries =
-    //     new ConcurrentDictionary<Guid, LoggerScope>();
-
-    private LoggerScope? _loggerScope;
+    public static MemoryLoggerManager Instance { get; } = new();
 
     // public void Log(string category, LogLevel logLevel, string text)
     // {
@@ -225,19 +259,51 @@ class MemoryLoggerManager
         Func<TState, Exception, string> formatter)
     {
         _loggerScope.AddLog(category, logLevel, eventId, state, exception, formatter);
-
     }
-}
-class MemoryLogger : ILogger
-{
-    private readonly string _category;
-    private readonly MemoryLoggerManager _memoryLoggerManager;
 
-    public MemoryLogger(string category, MemoryLoggerManager memoryLoggerManager)
+    public LoggerScope NewLogScope()
     {
-        _category = category;
-        _memoryLoggerManager = memoryLoggerManager;
+        _loggerScope.EnsureNull();
+        _loggerScope = new LoggerScope(this);
+        // _scopeId.EnsureNull();
+        // _scopeId = Guid.NewGuid();
+        return _loggerScope;
     }
+
+    public void RemoveLogScope()
+    {
+        if (_loggerScope == null)
+        {
+            Console.WriteLine("WARNING: Expected log scope to exist but it did not.");
+        }
+        else
+        {
+            _loggerScope = null;
+        }
+    }
+
+    #endregion
+
+    #region Non-Public members
+
+    // private Guid? _scopeId;
+    private MemoryLoggerManager()
+    {
+    }
+
+
+    //
+    // private static ConcurrentDictionary<Guid, LoggerScope> _logEntries =
+    //     new ConcurrentDictionary<Guid, LoggerScope>();
+
+    private LoggerScope? _loggerScope;
+
+    #endregion
+}
+
+internal class MemoryLogger : ILogger
+{
+    #region ILogger members
 
     /// <inheritdoc />
     public IDisposable BeginScope<TState>(TState state)
@@ -252,21 +318,44 @@ class MemoryLogger : ILogger
     }
 
     /// <inheritdoc />
-    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    public void Log<TState>(LogLevel logLevel,
+        EventId eventId,
+        TState state,
+        Exception? exception,
+        Func<TState, Exception?, string> formatter)
     {
         // var text = formatter(state, exception);
         _memoryLoggerManager.Log(_category, logLevel, eventId, state, exception, formatter);
-        
-
     }
 
-  
+    #endregion
+
+    #region Public members
+
+    public MemoryLogger(string category, MemoryLoggerManager memoryLoggerManager)
+    {
+        _category = category;
+        _memoryLoggerManager = memoryLoggerManager;
+    }
+
+    #endregion
+
+    #region Non-Public members
+
+    private readonly string _category;
+    private readonly MemoryLoggerManager _memoryLoggerManager;
+
+    #endregion
 }
 
-class LoggingScopeFake : IDisposable
+internal class LoggingScopeFake : IDisposable
 {
+    #region IDisposable members
+
     /// <inheritdoc />
     public void Dispose()
     {
     }
+
+    #endregion
 }

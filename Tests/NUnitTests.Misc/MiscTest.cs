@@ -10,7 +10,7 @@ using Transaction = ActiveMQ.Artemis.Client.Transactions.Transaction;
 
 [TestFixture]
 [Ignore("This fixture does not clean up created queues")]
-internal class MiscTest : NUnitTest, ICommonTest
+internal class MiscTest : NUnitTest
 {
     [SetUp]
     public async Task MiscTestSetUp()
