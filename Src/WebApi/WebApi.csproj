@@ -11,6 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\AmqpNetLite.Common\AmqpNetLite.Common.csproj" />
     <ProjectReference Include="..\RestApi.Common\RestApi.Common.csproj" />
   </ItemGroup>
   <ItemGroup>

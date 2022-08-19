@@ -7,6 +7,8 @@ internal class AmqpNetLiteConnectionSingleton
 {
     #region Public members
 
+    public static Address? Address => _address;
+
     public Connection AmqpNetLiteConnection { get; }
 
     public static AmqpNetLiteConnectionSingleton Instance

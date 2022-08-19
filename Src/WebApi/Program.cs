@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection.Extensions;
+﻿using AmqpNetLite.Common;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using WebApi.BackgroundServices;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,6 +20,7 @@ builder.Services.AddSwaggerGen();
 if (inst.DoRegisterHostedServices)
 {
     builder.Services.AddHostedService<StatisticsBackgroundService>();
+    builder.Services.AddHostedService<MessageBackgroundService>();
 }
 // builder.Services.AddHostedService<BackgroundService>(provider =>
 // {
@@ -27,6 +29,10 @@ if (inst.DoRegisterHostedServices)
 
 
 builder.Services.TryAddSingleton<IStatisticsService, StatisticsService>();
+builder.Services.TryAddSingleton<IMessageService, MessageService>();
+
+
+
 
 var app = builder.Build();
 

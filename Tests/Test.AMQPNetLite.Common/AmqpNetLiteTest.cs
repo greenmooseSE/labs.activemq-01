@@ -13,17 +13,25 @@ public abstract class AmqpNetLiteTest : UnitTest
     [SetUp]
     public void AmqpNetLiteTestSetUp()
     {
-        _queueScope = AmqpTempQueueScope.Create(QueuePrefix);
+        QueueScope = AmqpTempQueueScope.Create(QueuePrefix);
     }
 
     [TearDown]
     public void AmqpNetLiteTestTearDown()
     {
-        _queueScope.Dispose();
+        QueueScope.Dispose();
     }
 
     private const string _queuePrefix = "amqpnetlite-test-";
-    private AmqpTempQueueScope _queueScope;
+
+    protected static Message CreateMessage(string messageText)
+    {
+        var message = new Message {BodySection = new Data {Binary = Encoding.UTF8.GetBytes(messageText)}};
+        Assert.IsNull(message.Header);
+        //We don't want to keep msgs during restart
+        message.Header = new Header {Durable = false};
+        return message;
+    }
 
     protected string GetMsg()
     {
@@ -47,7 +55,7 @@ public abstract class AmqpNetLiteTest : UnitTest
 
     protected Message? GetOptionalMsgObj()
     {
-        Message? msg = _queueScope.AmqpReceiverLink.Receive(TimeSpan.FromMilliseconds(10));
+        Message? msg = QueueScope.AmqpReceiverLink.Receive(TimeSpan.FromMilliseconds(10));
         if (msg == null)
         {
             return null;
@@ -58,12 +66,11 @@ public abstract class AmqpNetLiteTest : UnitTest
 
     protected void SendMsg(string msg)
     {
-        var message = new Message {BodySection = new Data {Binary = Encoding.UTF8.GetBytes(msg)}};
-        Assert.IsNull(message.Header);
-        //We don't want to keep msgs during restart
-        message.Header = new Header {Durable = false};
-        _queueScope.AmqpSenderLink.Send(message);
+        Message message = CreateMessage(msg);
+        QueueScope.AmqpSenderLink.Send(message);
     }
 
     protected string QueuePrefix => _queuePrefix;
+
+    public AmqpTempQueueScope QueueScope { get; private set; }
 }

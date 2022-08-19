@@ -3,6 +3,7 @@
 using System.Diagnostics.CodeAnalysis;
 using ActiveMQ.Artemis.Client;
 using Amqp;
+using RestApi.Common.EnsureExtension;
 
 public class AmqpTempQueueScope : IDisposable
 {
@@ -56,7 +57,7 @@ public class AmqpTempQueueScope : IDisposable
 
             if (!queueWasDeleted)
             {
-                await topologyManager.DeleteAddressAsync(_topicName, true);
+                await topologyManager.DeleteAddressAsync(TopicName, true);
             }
         };
         disposeCb().Wait();
@@ -66,9 +67,13 @@ public class AmqpTempQueueScope : IDisposable
 
     #region Public members
 
+    public Address Address => AmqpNetLiteConnectionSingleton.Address.EnsureNotNull();
+
     public ReceiverLink AmqpReceiverLink { get; }
 
     public SenderLink AmqpSenderLink { get; }
+
+    public string TopicName { get; }
 
     //Cannot be async since awaiting it in a test setup will continue to a test teardown immediately
     public static AmqpTempQueueScope Create(string queuePrefix)
@@ -124,14 +129,13 @@ public class AmqpTempQueueScope : IDisposable
 
     private AmqpTempQueueScope(string topicName)
     {
-        _topicName = topicName;
+        TopicName = topicName;
         _amqpSession = new Session(AmqpNetLiteConnectionSingleton.Instance.AmqpNetLiteConnection);
-        AmqpReceiverLink = new ReceiverLink(_amqpSession, "test-receiver01", _topicName);
-        AmqpSenderLink = new SenderLink(_amqpSession, "test-sender01", _topicName);
+        AmqpReceiverLink = new ReceiverLink(_amqpSession, "test-receiver01", TopicName);
+        AmqpSenderLink = new SenderLink(_amqpSession, "test-sender01", TopicName);
     }
 
     private readonly Session _amqpSession;
-    private readonly string _topicName;
 
     #endregion
 }
