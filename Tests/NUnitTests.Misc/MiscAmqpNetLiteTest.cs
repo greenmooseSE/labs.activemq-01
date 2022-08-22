@@ -2,6 +2,7 @@
 
 using System.Transactions;
 using Amqp;
+using FluentAssertions;
 using Nito.AsyncEx;
 using NUnit.Framework;
 using Test.AMQPNetLite.Common;
@@ -96,6 +97,83 @@ internal class MiscAmqpNetLiteTest : AmqpNetLiteTest
         scope2.AmqpSenderLink.Send(msg2);
 
         Task.WaitAll(task1, task2);
+    }
+
+    [Test]
+    public void CanReceiveMessageAfterItHasBeenSentInEarlierConnection()
+    {
+        using var scope1 = AmqpTempQueueScope.Create("test-queue-01");
+        var messageText = $"Test msg {Guid.NewGuid()}";
+        Message msg = CreateMessage(messageText);
+        GetMsgText(msg).Should().Be(messageText);
+
+        scope1.AmqpSenderLink.Send(msg);
+
+        var connection2 = new Connection(scope1.Address);
+        try
+        {
+            var session = new Session(connection2);
+            var receiverLink = new ReceiverLink(session, "receiver01", scope1.TopicName);
+
+            Message? receivedMsg = receiverLink.Receive(TimeSpan.FromMilliseconds(10));
+            receivedMsg.Should().NotBeNull();
+            GetMsgText(receivedMsg).Should().Be(messageText);
+        }
+        finally
+        {
+            connection2.Close();
+        }
+    }
+
+    [Test]
+    public void CanReceiveMessageAfterItHasBeenSentInSameConnectionButDifferentSession()
+    {
+        using var scope1 = AmqpTempQueueScope.Create("test-queue-01");
+        var messageText = $"Test msg {Guid.NewGuid()}";
+        Message msg = CreateMessage(messageText);
+        GetMsgText(msg).Should().Be(messageText);
+
+        scope1.AmqpSenderLink.Send(msg);
+
+        // var connection2 = new Connection(scope1.Address);
+        var session = new Session(scope1.AmqpNetLiteConnection);
+        try
+        {
+            var receiverLink = new ReceiverLink(session, "receiver01", scope1.TopicName);
+
+            Message? receivedMsg = receiverLink.Receive(TimeSpan.FromMilliseconds(10));
+            receivedMsg.Should().NotBeNull();
+            GetMsgText(receivedMsg).Should().Be(messageText);
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [Test]
+    public void CanReceiveMessageAfterItHasBeenSentInSameSession()
+    {
+        using var scope1 = AmqpTempQueueScope.Create("test-queue-01");
+        var messageText = $"Test msg {Guid.NewGuid()}";
+        Message msg = CreateMessage(messageText);
+        GetMsgText(msg).Should().Be(messageText);
+
+        scope1.AmqpSenderLink.Send(msg);
+
+        // var connection2 = new Connection(scope1.Address);
+        // Session session = new Session(scope1.AmqpNetLiteConnection);
+        var receiverLink = new ReceiverLink(scope1.AmqpSession, "receiver01", scope1.TopicName);
+        try
+        {
+            Message? receivedMsg = receiverLink.Receive(TimeSpan.FromMilliseconds(10));
+            receivedMsg.Should().NotBeNull();
+            GetMsgText(receivedMsg).Should().Be(messageText);
+        }
+        finally
+        {
+            receiverLink.Close();
+        }
     }
 
     [Test]

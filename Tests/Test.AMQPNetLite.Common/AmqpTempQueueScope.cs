@@ -3,7 +3,7 @@
 using System.Diagnostics.CodeAnalysis;
 using ActiveMQ.Artemis.Client;
 using Amqp;
-using RestApi.Common.EnsureExtension;
+using global::Common.EnsureExtension;
 
 public class AmqpTempQueueScope : IDisposable
 {
@@ -69,9 +69,13 @@ public class AmqpTempQueueScope : IDisposable
 
     public Address Address => AmqpNetLiteConnectionSingleton.Address.EnsureNotNull();
 
+    public Connection AmqpNetLiteConnection => AmqpNetLiteConnectionSingleton.Instance.AmqpNetLiteConnection;
+
     public ReceiverLink AmqpReceiverLink { get; }
 
     public SenderLink AmqpSenderLink { get; }
+
+    public Session AmqpSession { get; }
 
     public string TopicName { get; }
 
@@ -130,12 +134,10 @@ public class AmqpTempQueueScope : IDisposable
     private AmqpTempQueueScope(string topicName)
     {
         TopicName = topicName;
-        _amqpSession = new Session(AmqpNetLiteConnectionSingleton.Instance.AmqpNetLiteConnection);
-        AmqpReceiverLink = new ReceiverLink(_amqpSession, "test-receiver01", TopicName);
-        AmqpSenderLink = new SenderLink(_amqpSession, "test-sender01", TopicName);
+        AmqpSession = new Session(AmqpNetLiteConnectionSingleton.Instance.AmqpNetLiteConnection);
+        AmqpReceiverLink = new ReceiverLink(AmqpSession, "test-receiver01", TopicName);
+        AmqpSenderLink = new SenderLink(AmqpSession, "test-sender01", TopicName);
     }
-
-    private readonly Session _amqpSession;
 
     #endregion
 }

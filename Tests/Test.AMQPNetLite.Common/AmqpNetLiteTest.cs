@@ -3,8 +3,8 @@
 using System.Text;
 using Amqp;
 using Amqp.Framing;
+using global::Common.EnsureExtension;
 using NUnit.Framework;
-using RestApi.Common.EnsureExtension;
 using Tests.Common;
 
 [TestFixture]
@@ -47,6 +47,11 @@ public abstract class AmqpNetLiteTest : UnitTest
             return null;
         }
 
+        return GetMsgText(message);
+    }
+
+    protected string GetMsgText(Message message)
+    {
         var msgText = Encoding.UTF8.GetString((byte[])message.Body);
         LogDebug($"Got message: {msgText}");
         return msgText;

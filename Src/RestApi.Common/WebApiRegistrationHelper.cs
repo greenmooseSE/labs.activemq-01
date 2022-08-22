@@ -1,7 +1,7 @@
 ﻿namespace RestApi.Common;
 
+using global::Common.EnsureExtension;
 using Microsoft.Extensions.DependencyInjection;
-using RestApi.Common.EnsureExtension;
 
 public class WebApiRegistrationHelper : IWebApiRegistrationHelper
 {

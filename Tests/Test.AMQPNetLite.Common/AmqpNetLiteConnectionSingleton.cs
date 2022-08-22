@@ -1,7 +1,7 @@
 ﻿namespace Test.AMQPNetLite.Common;
 
 using Amqp;
-using RestApi.Common.EnsureExtension;
+using global::Common.EnsureExtension;
 
 internal class AmqpNetLiteConnectionSingleton
 {

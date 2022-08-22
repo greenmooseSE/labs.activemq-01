@@ -2,9 +2,9 @@
 
 using System.Net.Http.Json;
 using System.Text.Json;
+using Common.EnsureExtension;
 using FluentAssertions;
 using NUnit.Framework;
-using RestApi.Common.EnsureExtension;
 using WebApi.BackgroundServices;
 using WebApi.Models;
 using WebApi.Tests.HttpIntTests.Common;

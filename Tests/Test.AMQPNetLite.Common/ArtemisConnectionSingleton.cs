@@ -1,7 +1,7 @@
 ﻿namespace Test.AMQPNetLite.Common;
 
 using ActiveMQ.Artemis.Client;
-using RestApi.Common.EnsureExtension;
+using global::Common.EnsureExtension;
 
 internal class ArtemisConnectionSingleton
 {

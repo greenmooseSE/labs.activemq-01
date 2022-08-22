@@ -1,10 +1,11 @@
-﻿using System;
-using System.Linq;
+﻿namespace AmqpNetLite.Common;
 
-namespace AmqpNetLite.Common
+public interface IMessageService : IDisposable
 {
-    public interface IMessageService
-    {
-        Task ProcessMessagesAsync(CancellationToken stoppingToken);
-    }
+    #region Public members
+
+    Task ProcessMessagesAsync(CancellationToken stoppingToken);
+    void SetQueueNames(IReadOnlyCollection<string> queueNames);
+
+    #endregion
 }

@@ -15,4 +15,9 @@
     <PackageReference Include="NUnit" Version="3.13.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\ActiveMqLabs01.Common\ActiveMqLabs01.Common.csproj" />
+    <ProjectReference Include="..\..\Src\Common\Common.csproj" />
+  </ItemGroup>
+
 </Project>
