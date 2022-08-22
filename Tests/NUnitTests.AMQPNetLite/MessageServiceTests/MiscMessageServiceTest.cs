@@ -51,7 +51,7 @@ internal class MiscMessageServiceTest : MessageServiceTest
         using var queueScope3 = AmqpTempQueueScope.Create("testqueue");
         var queueNames = new[] {queueScope1.TopicName, queueScope2.TopicName, queueScope3.TopicName};
 
-        var sut = NewMessageServiceInstance();
+        MessageService sut = NewMessageServiceInstance();
         var processedMsgs = new ConcurrentBag<string>();
 
         var msgTexts = queueNames.Select(qn => qn).ToList();
@@ -66,9 +66,104 @@ internal class MiscMessageServiceTest : MessageServiceTest
         };
 
         //act
-        ActByCallingProcessMessages(sut,queueNames);
+        ActByCallingProcessMessages(sut, queueNames);
 
         //assert
         processedMsgs.Should().BeEquivalentTo(msgTexts);
+    }
+
+    [Test]
+    public void NonAcceptedMessagesAreNotAvailableInQueueUntilReceiverLinkIsClosed()
+    {
+        using MessageService sut1 = NewMessageServiceInstanceNoAutoDispose();
+
+        using MessageService sut2 = NewMessageServiceInstanceNoAutoDispose();
+        sut1.Should().NotBeSameAs(sut2);
+
+        var msgText = "Some msg";
+        SendMsg(msgText);
+
+        var processedMsgs = new ConcurrentBag<string>();
+
+        void onMsg(Message msg)
+        {
+            processedMsgs.Add(GetMsgText(msg));
+        }
+
+        sut1.OnProcessMessage += onMsg;
+        sut2.OnProcessMessage += onMsg;
+        ActByCallingProcessMessages(sut1, QueueScope.TopicName);
+        ActByCallingProcessMessages(sut2, QueueScope.TopicName);
+
+        //Sanity assert
+        processedMsgs.Should().HaveCount(1);
+
+        //Act
+        sut1.CloseReceiverLinks();
+
+        //Actual assert
+        ActByCallingProcessMessagesKeepCurrentQueues(sut2);
+        processedMsgs.Should().HaveCount(2);
+    }
+
+    [Test]
+    public void NonAcceptedMessagesAreNotAvailableInQueueUntilSessionForReceiverLinkIsClosed()
+    {
+        using MessageService sut1 = NewMessageServiceInstanceNoAutoDispose();
+
+        using MessageService sut2 = NewMessageServiceInstanceNoAutoDispose();
+        sut1.Should().NotBeSameAs(sut2);
+
+        var msgText = "Some msg";
+        SendMsg(msgText);
+
+        var processedMsgs = new ConcurrentBag<string>();
+
+        void onMsg(Message msg)
+        {
+            processedMsgs.Add(GetMsgText(msg));
+        }
+
+        sut1.OnProcessMessage += onMsg;
+        sut2.OnProcessMessage += onMsg;
+        ActByCallingProcessMessages(sut1, QueueScope.TopicName);
+        ActByCallingProcessMessages(sut2, QueueScope.TopicName);
+        //Sanity assert
+        processedMsgs.Should().HaveCount(1);
+
+        //Act
+        sut1.CloseSession();
+
+        //Actual assert
+        ActByCallingProcessMessagesKeepCurrentQueues(sut2);
+        processedMsgs.Should().HaveCount(2);
+    }
+
+    [Test]
+    public void NonAcceptedMessagesAreStillInQueueAfterFirstMsgServiceInstanceIsDisposed()
+    {
+        MessageService sut = NewMessageServiceInstance();
+
+        var msgText = "Some msg";
+        SendMsg(msgText);
+
+        var processedMsgs = new ConcurrentBag<string>();
+        sut.OnProcessMessage += msg =>
+        {
+            processedMsgs.Add(GetMsgText(msg));
+        };
+
+        ActByCallingProcessMessages(sut, QueueScope.TopicName);
+        processedMsgs.Should().HaveCount(1);
+
+        DisposeCurrentMessageServiceInstance();
+
+        sut = NewMessageServiceInstance();
+        sut.OnProcessMessage += msg =>
+        {
+            processedMsgs.Add(GetMsgText(msg));
+        };
+        ActByCallingProcessMessages(sut, QueueScope.TopicName);
+        processedMsgs.Should().HaveCount(2);
     }
 }

@@ -1,9 +1,5 @@
 ﻿namespace NUnitTests.Misc.MessageServiceTests;
 
-using System;
-using System.Linq;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using AmqpNetLite.Common;
 using Common.EnsureExtension;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,25 +10,18 @@ using Tests.Common.Logging;
 [TestFixture]
 internal abstract class MessageServiceTest : AmqpNetLiteTest, IIocTest
 {
-    private static readonly IServiceProvider _serviceProvider;
-    private LoggerScope _loggerScope;
-    private IMessageService? _messageServiceInstance;
-
-
     [SetUp]
     public void MessageServiceTestSetUp()
     {
         _loggerScope = MemoryLoggerManager.Instance.NewLogScope();
-        
+
         MessageService.IterationDelay = TimeSpan.FromMilliseconds(10);
     }
-    private bool DoLog => true;
 
     [TearDown]
     public void MessageServiceTestTearDown()
     {
-        _messageServiceInstance?.Dispose();
-        _messageServiceInstance = null;
+        DisposeCurrentMessageServiceInstance();
         if (DoLog)
         {
             IReadOnlyList<LogEntry> logs = _loggerScope.EnsureNotNull().AllLogs;
@@ -55,12 +44,45 @@ internal abstract class MessageServiceTest : AmqpNetLiteTest, IIocTest
 
         _serviceProvider = iocHelper.BuildServiceProvider();
     }
+
+    private LoggerScope _loggerScope;
+    private IMessageService? _messageServiceInstance;
+    private static readonly IServiceProvider _serviceProvider;
+
+    protected void ActByCallingProcessMessages(MessageService sut, string queueName = "test-queue01")
+    {
+        ActByCallingProcessMessages(sut, new[] {queueName});
+    }
+
+    protected void ActByCallingProcessMessages(MessageService sut, IReadOnlyCollection<string> queueNames)
+    {
+        sut.SetQueueNames(queueNames);
+        ActByCallingProcessMessagesKeepCurrentQueues(sut);
+    }
+
+    protected void ActByCallingProcessMessagesKeepCurrentQueues(MessageService sut)
+    {
+        var token = new CancellationTokenSource(TimeSpan.FromMilliseconds(30));
+        sut.ProcessMessagesAsync(token.Token).Wait();
+    }
+
+    /// <summary>Disposes the instance created via <see cref="NewMessageServiceInstance" />.</summary>
+    protected void DisposeCurrentMessageServiceInstance()
+    {
+        _messageServiceInstance?.Dispose();
+        _messageServiceInstance = null;
+    }
+
     /// <inheritdoc />
     public T GetRequiredService<T>() where T : notnull
     {
         return _serviceProvider.GetRequiredService<T>();
     }
 
+    /// <summary>
+    ///     Creates a new instance. If multiple instances are to be created in same tests you must call
+    ///     <see cref="DisposeCurrentMessageServiceInstance" /> between creations.
+    /// </summary>
     protected MessageService NewMessageServiceInstance()
     {
         _messageServiceInstance.EnsureNull();
@@ -68,22 +90,23 @@ internal abstract class MessageServiceTest : AmqpNetLiteTest, IIocTest
         return (MessageService)_messageServiceInstance;
     }
 
-    protected void ActByCallingProcessMessages(MessageService sut, string queueName = "test-queue01")
+    /// <summary>
+    ///     Creates a new instance without disposing it during tear down. Caller is responsible for the returned instance
+    ///     to be disposed.
+    /// </summary>
+    protected MessageService NewMessageServiceInstanceNoAutoDispose()
     {
-        ActByCallingProcessMessages(sut, new[]{queueName});
+        return (MessageService)GetRequiredService<IMessageService>();
     }
-    protected void ActByCallingProcessMessages(MessageService sut, IReadOnlyCollection<string> queueNames)
-    {
-        sut.SetQueueNames(queueNames);
-        var token = new CancellationTokenSource(TimeSpan.FromMilliseconds(30));
-        sut.ProcessMessagesAsync(token.Token).Wait();
 
-    }
+    private bool DoLog => true;
 }
 
 internal interface IIocTest
 {
-    T GetRequiredService<T>();
-    
+    #region Public members
 
+    T GetRequiredService<T>();
+
+    #endregion
 }

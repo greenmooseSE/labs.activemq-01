@@ -13,6 +13,7 @@ public class MessageService : IMessageService
     /// <inheritdoc />
     public void Dispose()
     {
+        _log.LogDebug("Disposing instance {id}.", _uniqueId);
         _connection.Close();
     }
 
@@ -34,6 +35,7 @@ public class MessageService : IMessageService
                     _log.LogDebug("Starting to listening in receiver {receiverName}", receiverLink.Name);
                     Message? msg = await receiverLink.ReceiveAsync(IterationDelay);
                     _log.LogDebug("Stopped in receiver {receiverName}", receiverLink.Name);
+                    
                     return new MessageInfo(receiverLink, msg);
                 })
                 .Unwrap();
@@ -99,13 +101,16 @@ public class MessageService : IMessageService
         }
     }
 
+    private readonly string _uniqueId = Guid.NewGuid().ToString();
+
     public void SetQueueNames(IReadOnlyCollection<string> queueNames)
     {
         _receiverLinks.EnsureEmpty();
+        var uniqueId = Guid.NewGuid().ToString();
 
         var queueCount = queueNames.Select((queueName, idx) =>
             {
-                var receiverLink = new ReceiverLink(_session, $"receiver-link-{idx + 1}", queueName);
+                var receiverLink = new ReceiverLink(_session, $"receiver-link-{idx + 1}-{_uniqueId}", queueName);
                 _receiverLinks.Add(receiverLink);
                 return idx;
             })
