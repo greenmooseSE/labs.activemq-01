@@ -53,7 +53,6 @@ public abstract class AmqpNetLiteTest : UnitTest
     protected string GetMsgText(Message message)
     {
         var msgText = Encoding.UTF8.GetString((byte[])message.Body);
-        LogDebug($"Got message: {msgText}");
         return msgText;
     }
 

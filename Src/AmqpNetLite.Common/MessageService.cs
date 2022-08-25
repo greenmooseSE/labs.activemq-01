@@ -21,35 +21,27 @@ public class MessageService : IMessageService
 
     #region IMessageService members
 
-    public void CloseSession()
-    {
-        _session.Close();
-    }
-    public void CloseReceiverLinks()
-    {
-        foreach (ReceiverLink receiverLink in _receiverLinks)
-        {
-            receiverLink.Close();
-        }
-    }
-
     /// <inheritdoc />
     public async Task ProcessMessagesAsync(CancellationToken stoppingToken)
     {
-        using var s1 = _log.BeginScope(nameof(ProcessMessagesAsync)+$"-{_uniqueId}");
+        using IDisposable s1 = _log.BeginScope(nameof(ProcessMessagesAsync) + $"-{_uniqueId}");
         // var host = new ContainerHost(_address);
         var serviceName = nameof(MessageService);
 
 
-        Task<MessageInfo> ReceiveMsgTask(ReceiverLink receiverLink)
+        Task<MessageInfo> ReceiveMsgTask(ReceiverLinkWrapper receiverLinkWrapper)
         {
             return Task.Factory.StartNew(async () =>
                 {
+                    ReceiverLink receiverLink = receiverLinkWrapper.ReceiverLink;
                     _log.LogDebug("Starting to listening in receiver {receiverName}", receiverLink.Name);
                     Message? msg = await receiverLink.ReceiveAsync(IterationDelay);
-                    _log.LogDebug("Stopped listening in receiver {receiverName} (DidGetMessage: {DidGetMessage})", receiverLink.Name, msg!=null);
-                    
-                    return new MessageInfo(receiverLink, msg);
+                    _log.LogDebug(
+                        "Stopped listening in receiver {receiverName} (DidGetMessage: {DidGetMessage})",
+                        receiverLink.Name,
+                        msg != null);
+
+                    return new MessageInfo(receiverLinkWrapper, msg);
                 })
                 .Unwrap();
         }
@@ -65,10 +57,10 @@ public class MessageService : IMessageService
 
             //Create the tasks to receive msgs
             var receiveMsgTaskMap = new ConcurrentDictionary<string, Task<MessageInfo>>();
-            foreach (ReceiverLink receiverLink in _receiverLinks)
+            foreach (ReceiverLinkWrapper receiverLink in _receiverLinks)
             {
                 Task<MessageInfo> receiveMsgTask = ReceiveMsgTask(receiverLink);
-                receiveMsgTaskMap.TryAdd(receiverLink.Name, receiveMsgTask).EnsureTrue();
+                receiveMsgTaskMap.TryAdd(receiverLink.ReceiverLink.Name, receiveMsgTask).EnsureTrue();
             }
 
             //While we have pending tasks, keep listening to messages until we should cancel
@@ -77,22 +69,24 @@ public class MessageService : IMessageService
                 Task<MessageInfo>[] allTasks = receiveMsgTaskMap.Values.ToArray();
                 var completedTaskIdx = Task.WaitAny(allTasks);
                 _log.LogDebug("Removing completed task at idx {idx}", completedTaskIdx);
-                using var s2 = _log.BeginScope($"Task-{completedTaskIdx}");
+                using IDisposable s2 = _log.BeginScope($"Task-{completedTaskIdx}");
                 MessageInfo receivedMsgInfo = allTasks[completedTaskIdx].Result;
 
-                ReceiverLink receiverLink = receivedMsgInfo.ReceiverLink;
-                
+                ReceiverLinkWrapper receiverLinkWrapper = receivedMsgInfo.ReceiverLink;
+                ReceiverLink receiverLink = receiverLinkWrapper.ReceiverLink;
+
                 Message? msg = receivedMsgInfo.Message;
                 if (msg != null)
                 {
-                    _log.LogTrace("Firing events for message in receiver link {receiverName}.", receiverLink.Name);
+                    _log.LogTrace("Firing events for message in receiver link {receiverName}.",
+                        receiverLink.Name);
                     {
-                        using var s3 = _log.BeginScope("OnProcessMessage");
+                        using IDisposable s3 = _log.BeginScope("OnProcessMessage");
                         _log.LogTrace("Invoking OnProcessMessage");
                         OnProcessMessage?.Invoke(msg);
                     }
                     {
-                        using var s4 = _log.BeginScope("OnProcessMessageEx");
+                        using IDisposable s4 = _log.BeginScope("OnProcessMessageEx");
                         _log.LogTrace("Invoking OnProcessMessageEx");
                         OnProcessMessageEx?.Invoke(msg, receiverLink);
                     }
@@ -105,7 +99,8 @@ public class MessageService : IMessageService
                         SleepPeriodAfterFetchedMessage,
                         receiverLink.Name);
                     await Task.Delay(SleepPeriodAfterFetchedMessage);
-                    receiveMsgTaskMap.TryAdd(receiverLink.Name, ReceiveMsgTask(receiverLink)).EnsureTrue();
+                    receiveMsgTaskMap.TryAdd(receiverLink.Name, ReceiveMsgTask(receiverLinkWrapper))
+                        .EnsureTrue();
                 }
             }
 
@@ -125,22 +120,14 @@ public class MessageService : IMessageService
         }
     }
 
-    private readonly string _uniqueId = Guid.NewGuid().ToString();
-
     public void SetQueueNames(IReadOnlyCollection<string> queueNames)
     {
-        _receiverLinks.EnsureEmpty();
-        var uniqueId = Guid.NewGuid().ToString();
+        SetQueueNamesHelper(queueNames);
+    }
 
-        var queueCount = queueNames.Select((queueName, idx) =>
-            {
-                var receiverLink = new ReceiverLink(_session, $"receiver-link-{idx + 1}-{_uniqueId}", queueName);
-                _receiverLinks.Add(receiverLink);
-                return idx;
-            })
-            .ToList()
-            .Count;
-        _log.LogDebug("Setting {queueCount} no of queue names.", queueCount);
+    public void SetQueueNames(IReadOnlyCollection<string> queueNames, int creditLimit)
+    {
+        SetQueueNamesHelper(queueNames, creditLimit);
     }
 
     #endregion
@@ -152,6 +139,50 @@ public class MessageService : IMessageService
 
     public event Action<Message>? OnProcessMessage;
     public event Action<Message, ReceiverLink>? OnProcessMessageEx;
+
+    public void CloseReceiverLinks()
+    {
+        foreach (ReceiverLinkWrapper receiverLink in _receiverLinks)
+        {
+            receiverLink.ReceiverLink.Close();
+        }
+    }
+
+    public void CloseSession()
+    {
+        _session.Close();
+    }
+
+    public void SetCreditLimit(int creditLimit)
+    {
+        foreach (ReceiverLinkWrapper receiverLink in _receiverLinks)
+        {
+            SetCredit(receiverLink, creditLimit);
+        }
+    }
+
+    private long _uniqueId = 0;
+    public void SetQueueNamesHelper(IReadOnlyCollection<string> queueNames, int? creditLimit = null)
+    {
+        _receiverLinks.EnsureEmpty();
+
+        var queueCount = queueNames.Select((queueName, idx) =>
+            {
+                var receiverLinkWrapper = new ReceiverLinkWrapper(new ReceiverLink(_session,
+                    $"receiver-link-{idx + 1}-{Interlocked.Increment(ref _uniqueId)}",
+                    queueName));
+                if (creditLimit.HasValue)
+                {
+                    SetCredit(receiverLinkWrapper, creditLimit.Value);
+                }
+
+                _receiverLinks.Add(receiverLinkWrapper);
+                return idx;
+            })
+            .ToList()
+            .Count;
+        _log.LogDebug("Setting {queueCount} no of queue names.", queueCount);
+    }
 
     public MessageService(ILogger<MessageService> log)
     {
@@ -172,8 +203,15 @@ public class MessageService : IMessageService
     private readonly Address _address;
     private readonly Connection _connection;
     private readonly ILogger<MessageService> _log;
-    private readonly List<ReceiverLink> _receiverLinks = new();
+    private readonly List<ReceiverLinkWrapper> _receiverLinks = new();
     private readonly Session _session;
+
+    private void SetCredit(ReceiverLinkWrapper receiverLink, int creditLimit)
+    {
+        //If we use CreditMode.Manual, the receiver link will not automatically get new messages 
+        //  If we use CreditMode.Auto, it seems
+        receiverLink.SetCredit(creditLimit, CreditMode.Manual);
+    }
 
     #region Nested types
 
@@ -182,9 +220,9 @@ public class MessageService : IMessageService
         #region Public members
 
         public Message? Message { get; }
-        public ReceiverLink ReceiverLink { get; }
+        public ReceiverLinkWrapper ReceiverLink { get; }
 
-        public MessageInfo(ReceiverLink receiverLink, Message? message)
+        public MessageInfo(ReceiverLinkWrapper receiverLink, Message? message)
         {
             ReceiverLink = receiverLink;
             Message = message;

@@ -23,7 +23,7 @@ public class LoggerScope : IDisposable
     public IReadOnlyList<LogEntry> AllLogs => _logEntries.OrderBy(l => l.TimestampOffset).ToList();
 
 
-    public void AddLog<TState>(LoggingContextScope loggingContextScope,
+    public void AddLog<TState>(LoggingContextScope? loggingContextScope,
         string category,
         LogLevel logLevel,
         EventId eventId,

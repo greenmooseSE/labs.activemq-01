@@ -2,8 +2,10 @@
 
 using System.Collections.Concurrent;
 using Amqp;
+using Amqp.Types;
 using AmqpNetLite.Common;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Test.AMQPNetLite.Common;
 
@@ -39,24 +41,27 @@ internal class MiscMessageServiceTest : MessageServiceTest
             }
             else
             {
-                LogDebug($"Not accepting the message '{GetMsgText(msg)}'.");
+                Logger.LogInformation($"Not accepting the message '{GetMsgText(msg)}'.");
             }
         }
 
         sut1.OnProcessMessageEx += OnMsgWithAccept;
         sut2.OnProcessMessage += onMsg;
-        ActByCallingProcessMessages(sut1, QueueScope.TopicName);
-        ActByCallingProcessMessages(sut2, QueueScope.TopicName);
+        //We use credit limit 2 to ensure both messages are consumed by sut1.
+        ActByCallingProcessMessages(sut1, QueueScope.TopicName, creditLimit:2);
+        processedMsgs.Should().HaveCount(2);
 
-        //Sanity assert
+        //Sanity assert - no messages are available for sut2
+        ActByCallingProcessMessages(sut2, QueueScope.TopicName);
         processedMsgs.Should().HaveCount(2);
 
         //Act
         sut1.CloseReceiverLinks();
 
-        //Actual assert - we should only have 1 msg left in queue
+        //Actual assert - msg1, and only msg1, should re-appear in queue and be processed by sut2
         ActByCallingProcessMessagesKeepCurrentQueues(sut2);
         processedMsgs.Should().HaveCount(3);
+        processedMsgs.Where(msg => msg == "Msg2").Should().HaveCount(2);
     }
 
     [Test]
@@ -67,8 +72,8 @@ internal class MiscMessageServiceTest : MessageServiceTest
         sut1.Should().NotBeSameAs(sut2);
         var processedMsgsSut1 = new ConcurrentBag<string>();
         var processedMsgsSut2 = new ConcurrentBag<string>();
-        sut1.SetQueueNames(new[]{QueueScope.TopicName});
-        sut2.SetQueueNames(new[]{QueueScope.TopicName});
+        sut1.SetQueueNames(new[] {QueueScope.TopicName});
+        sut2.SetQueueNames(new[] {QueueScope.TopicName});
         sut1.OnProcessMessageEx += (msg, rlink) =>
         {
             var msgText = GetMsgText(msg);
@@ -87,6 +92,7 @@ internal class MiscMessageServiceTest : MessageServiceTest
 
         SendMsg("Msg1");
         SendMsg("Msg2");
+        sut1.SetCreditLimit(1);
 
         //act
         ActByCallingProcessMessagesKeepCurrentQueues(sut1);
@@ -94,59 +100,95 @@ internal class MiscMessageServiceTest : MessageServiceTest
         //assert
         processedMsgsSut1.Should().HaveCount(1);
         processedMsgsSut2.Should().HaveCount(1);
-
-        Assert.Fail("TODO:(B81ISE/20220823) Complete test CreditForReceiverLink1ReservesAllMessagesFromBrokerForThatCredit");
     }
 
-    [Test]
-    public void AcceptedMessageThatIsRejectedDoesNotBecomeAvailableUntilReceiverLinkIsClosed()
+
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    public void MessageThatIsRejectedEndsUpInDeadLetterQueueImmediately(bool doAcceptItBeforeReject, bool isMsgExpectedToBeInDlq)
     {
         using MessageService sut1 = NewMessageServiceInstanceNoAutoDispose();
 
         using MessageService sut2 = NewMessageServiceInstanceNoAutoDispose();
+        using MessageService sutDlq = NewMessageServiceInstanceNoAutoDispose();
         sut1.Should().NotBeSameAs(sut2);
 
-        SendMsg("Msg1");
-        SendMsg("Msg2");
+        var dlqMsgText = $"Msg1-{Guid.NewGuid()}";
+
+        SendMsg(dlqMsgText);
 
         var processedMsgs = new ConcurrentBag<string>();
 
-        void onMsg(Message msg)
-        {
-            processedMsgs.Add(GetMsgText(msg));
-        }
-
         var acceptedMsgs = 0;
 
-        void OnMsgWithAcceptAndRejectForSut1(Message msg, ReceiverLink receiverLink)
+        sut1.OnProcessMessageEx += OnMsgWithAcceptAndReject;
+        sut2.OnProcessMessageEx += OnMsgWithAcceptAndReject;
+        bool dlqMsgWasFound = false;
+        sutDlq.OnProcessMessageEx += (msg, receiverLink) =>
         {
+            Logger.LogInformation($"Got msg {GetMsgText(msg)}");
+            if (GetMsgText(msg) == dlqMsgText)
+            {
+                dlqMsgWasFound = true;
+                receiverLink.Accept(msg);
+                Logger.LogInformation($"Accepted msg {GetMsgText(msg)}");
+            }
+        };
+
+        //consume any existing msgs in DLQ
+
+        void OnMsgWithAcceptAndReject(Message msg, ReceiverLink receiverLink)
+        {
+            using var scope1 = Logger.BeginScope(nameof(OnMsgWithAcceptAndReject));
+            Logger.LogInformation($"Got msg({GetMsgText(msg)}).");
+            //Expect only 1 msg to be processed
             processedMsgs.Add(GetMsgText(msg));
             if (Interlocked.Increment(ref acceptedMsgs) == 1)
             {
-                receiverLink.Accept(msg);
+                if (doAcceptItBeforeReject)
+                {
+                    receiverLink.Accept(msg);
+                }
+                Logger.LogInformation($"Rejecting msg {GetMsgText(msg)}");
                 receiverLink.Reject(msg);
+                // receiverLink.Modify(msg, false, true);
             }
             else
             {
-                LogDebug($"Not accepting the message '{GetMsgText(msg)}'.");
+                receiverLink.Accept(msg);
+                Logger.LogInformation($"Not rejecting msg {GetMsgText(msg)}");
             }
         }
 
-        sut1.OnProcessMessageEx += OnMsgWithAcceptAndRejectForSut1;
-        sut2.OnProcessMessage += onMsg;
-        ActByCallingProcessMessages(sut1, QueueScope.TopicName);
-        ActByCallingProcessMessages(sut2, QueueScope.TopicName);
+        //ACT - Fetch first message in sut1 (which rejects it)
+        ActByCallingProcessMessages(sut1, QueueScope.TopicName, creditLimit: 1, actLogScopeName: "sut1");
+        processedMsgs.Should().HaveCount(1);
 
-        //Sanity assert
+        //Verify only Msg2 is available for sut2
+        SendMsg("Msg2");
+        ActByCallingProcessMessages(sut2, QueueScope.TopicName, creditLimit: 1, actLogScopeName: "sut2");
         processedMsgs.Should().HaveCount(2);
-        
 
-        //Act
-        sut1.CloseReceiverLinks();
+        //ASSERT - Verify we have Msg1 in DLQ (it can take a while ~1s for msg to end up there)
+        //  Since DLQ my contain many non related msgs, we need to bump act duration and stop when we found our msg
+        CancellationTokenSource? cancellationToken= new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        ActCancellationTokenParamCb = () => cancellationToken;
+        var wasFoundTask = Task.Factory.StartNew(() =>
+        {
+            while (cancellationToken==null || !cancellationToken.IsCancellationRequested)
+            {
+                if (cancellationToken!=null && dlqMsgWasFound)
+                {
+                    cancellationToken.Cancel();
+                }
 
-        //Actual assert - we should only have 1 msg left in queue
-        ActByCallingProcessMessagesKeepCurrentQueues(sut2);
-        processedMsgs.Should().HaveCount(3);
+            }
+        });
+
+        ActByCallingProcessMessages(sutDlq, "DLQ", creditLimit: 10*1000, actLogScopeName: "sutDlq");
+        wasFoundTask.Wait();
+
+        dlqMsgWasFound.Should().Be(isMsgExpectedToBeInDlq);
     }
 
     [Test]
@@ -279,7 +321,7 @@ internal class MiscMessageServiceTest : MessageServiceTest
     }
 
     [Test]
-    public void NonAcceptedMessagesAreStillInQueueAfterFirstMsgServiceInstanceIsDisposed()
+    public void NonAcceptedMessagesArePutBackInQueueAfterFirstMsgServiceInstanceIsDisposed()
     {
         MessageService sut = NewMessageServiceInstance();
 
