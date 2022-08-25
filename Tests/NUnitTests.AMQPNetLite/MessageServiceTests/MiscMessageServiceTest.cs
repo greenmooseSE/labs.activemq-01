@@ -11,6 +11,145 @@ using Test.AMQPNetLite.Common;
 internal class MiscMessageServiceTest : MessageServiceTest
 {
     [Test]
+    public void AcceptedMessageIsNotAvailableEvenIfReceiverLinkIsClosed()
+    {
+        using MessageService sut1 = NewMessageServiceInstanceNoAutoDispose();
+
+        using MessageService sut2 = NewMessageServiceInstanceNoAutoDispose();
+        sut1.Should().NotBeSameAs(sut2);
+
+        SendMsg("Msg1");
+        SendMsg("Msg2");
+
+        var processedMsgs = new ConcurrentBag<string>();
+
+        void onMsg(Message msg)
+        {
+            processedMsgs.Add(GetMsgText(msg));
+        }
+
+        var acceptedMsgs = 0;
+
+        void OnMsgWithAccept(Message msg, ReceiverLink receiverLink)
+        {
+            processedMsgs.Add(GetMsgText(msg));
+            if (Interlocked.Increment(ref acceptedMsgs) == 1)
+            {
+                receiverLink.Accept(msg);
+            }
+            else
+            {
+                LogDebug($"Not accepting the message '{GetMsgText(msg)}'.");
+            }
+        }
+
+        sut1.OnProcessMessageEx += OnMsgWithAccept;
+        sut2.OnProcessMessage += onMsg;
+        ActByCallingProcessMessages(sut1, QueueScope.TopicName);
+        ActByCallingProcessMessages(sut2, QueueScope.TopicName);
+
+        //Sanity assert
+        processedMsgs.Should().HaveCount(2);
+
+        //Act
+        sut1.CloseReceiverLinks();
+
+        //Actual assert - we should only have 1 msg left in queue
+        ActByCallingProcessMessagesKeepCurrentQueues(sut2);
+        processedMsgs.Should().HaveCount(3);
+    }
+
+    [Test]
+    public void CreditForReceiverLink1ReservesAllMessagesFromBrokerForThatCredit()
+    {
+        using MessageService sut1 = NewMessageServiceInstanceNoAutoDispose();
+        using MessageService sut2 = NewMessageServiceInstanceNoAutoDispose();
+        sut1.Should().NotBeSameAs(sut2);
+        var processedMsgsSut1 = new ConcurrentBag<string>();
+        var processedMsgsSut2 = new ConcurrentBag<string>();
+        sut1.SetQueueNames(new[]{QueueScope.TopicName});
+        sut2.SetQueueNames(new[]{QueueScope.TopicName});
+        sut1.OnProcessMessageEx += (msg, rlink) =>
+        {
+            var msgText = GetMsgText(msg);
+            processedMsgsSut1.Add(msgText);
+            LogDebug($"SUT1 Got msg '{msgText}' from link '{rlink.Name}'.");
+
+            // ReSharper disable once AccessToDisposedClosure
+            ActByCallingProcessMessagesKeepCurrentQueues(sut2);
+        };
+        sut2.OnProcessMessageEx += (msg, rlink) =>
+        {
+            var msgText = GetMsgText(msg);
+            LogDebug($"SUT2 Got msg '{msgText}' from link '{rlink.Name}'.");
+            processedMsgsSut2.Add(msgText);
+        };
+
+        SendMsg("Msg1");
+        SendMsg("Msg2");
+
+        //act
+        ActByCallingProcessMessagesKeepCurrentQueues(sut1);
+
+        //assert
+        processedMsgsSut1.Should().HaveCount(1);
+        processedMsgsSut2.Should().HaveCount(1);
+
+        Assert.Fail("TODO:(B81ISE/20220823) Complete test CreditForReceiverLink1ReservesAllMessagesFromBrokerForThatCredit");
+    }
+
+    [Test]
+    public void AcceptedMessageThatIsRejectedDoesNotBecomeAvailableUntilReceiverLinkIsClosed()
+    {
+        using MessageService sut1 = NewMessageServiceInstanceNoAutoDispose();
+
+        using MessageService sut2 = NewMessageServiceInstanceNoAutoDispose();
+        sut1.Should().NotBeSameAs(sut2);
+
+        SendMsg("Msg1");
+        SendMsg("Msg2");
+
+        var processedMsgs = new ConcurrentBag<string>();
+
+        void onMsg(Message msg)
+        {
+            processedMsgs.Add(GetMsgText(msg));
+        }
+
+        var acceptedMsgs = 0;
+
+        void OnMsgWithAcceptAndRejectForSut1(Message msg, ReceiverLink receiverLink)
+        {
+            processedMsgs.Add(GetMsgText(msg));
+            if (Interlocked.Increment(ref acceptedMsgs) == 1)
+            {
+                receiverLink.Accept(msg);
+                receiverLink.Reject(msg);
+            }
+            else
+            {
+                LogDebug($"Not accepting the message '{GetMsgText(msg)}'.");
+            }
+        }
+
+        sut1.OnProcessMessageEx += OnMsgWithAcceptAndRejectForSut1;
+        sut2.OnProcessMessage += onMsg;
+        ActByCallingProcessMessages(sut1, QueueScope.TopicName);
+        ActByCallingProcessMessages(sut2, QueueScope.TopicName);
+
+        //Sanity assert
+        processedMsgs.Should().HaveCount(2);
+        
+
+        //Act
+        sut1.CloseReceiverLinks();
+
+        //Actual assert - we should only have 1 msg left in queue
+        ActByCallingProcessMessagesKeepCurrentQueues(sut2);
+        processedMsgs.Should().HaveCount(3);
+    }
+
+    [Test]
     public void CanResolveMsgService()
     {
         Assert.NotNull(NewMessageServiceInstance());
@@ -73,7 +212,7 @@ internal class MiscMessageServiceTest : MessageServiceTest
     }
 
     [Test]
-    public void NonAcceptedMessagesAreNotAvailableInQueueUntilReceiverLinkIsClosed()
+    public void NonAcceptedMessageBecomesAvailableInQueueWhenReceiverLinkIsClosed()
     {
         using MessageService sut1 = NewMessageServiceInstanceNoAutoDispose();
 
@@ -107,7 +246,7 @@ internal class MiscMessageServiceTest : MessageServiceTest
     }
 
     [Test]
-    public void NonAcceptedMessagesAreNotAvailableInQueueUntilSessionForReceiverLinkIsClosed()
+    public void NonAcceptedMessageBecomesAvailableInQueueIfSessionIsClosed()
     {
         using MessageService sut1 = NewMessageServiceInstanceNoAutoDispose();
 

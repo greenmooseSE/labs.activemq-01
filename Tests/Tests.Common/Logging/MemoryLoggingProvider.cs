@@ -26,14 +26,15 @@ public class MemoryLoggingProvider : ILoggerProvider
     #endregion
 }
 
-internal class MemoryLogger : ILogger
+public class MemoryLogger : ILogger
 {
     #region ILogger members
 
     /// <inheritdoc />
     public IDisposable BeginScope<TState>(TState state)
     {
-        return new LoggingScopeFake();
+        IDisposable scope = _memoryLoggerManager.BeginScope(state, this);
+        return scope;
     }
 
     /// <inheritdoc />
@@ -50,16 +51,18 @@ internal class MemoryLogger : ILogger
         Func<TState, Exception?, string> formatter)
     {
         // var text = formatter(state, exception);
-        _memoryLoggerManager.Log(_category, logLevel, eventId, state, exception, formatter);
+        _memoryLoggerManager.Log(Category, logLevel, eventId, state, exception, formatter);
     }
 
     #endregion
 
     #region Public members
 
+    public string Category { get; }
+
     public MemoryLogger(string category, MemoryLoggerManager memoryLoggerManager)
     {
-        _category = category;
+        Category = category;
         _memoryLoggerManager = memoryLoggerManager;
     }
 
@@ -67,7 +70,6 @@ internal class MemoryLogger : ILogger
 
     #region Non-Public members
 
-    private readonly string _category;
     private readonly MemoryLoggerManager _memoryLoggerManager;
 
     #endregion
@@ -80,7 +82,23 @@ internal class LoggingScopeFake : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        _onDisposeCb();
     }
+
+    #endregion
+
+    #region Public members
+
+    public LoggingScopeFake(Action onDisposeCb)
+    {
+        _onDisposeCb = onDisposeCb;
+    }
+
+    #endregion
+
+    #region Non-Public members
+
+    private readonly Action _onDisposeCb;
 
     #endregion
 }

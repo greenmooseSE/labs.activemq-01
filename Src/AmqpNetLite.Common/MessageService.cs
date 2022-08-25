@@ -21,9 +21,22 @@ public class MessageService : IMessageService
 
     #region IMessageService members
 
+    public void CloseSession()
+    {
+        _session.Close();
+    }
+    public void CloseReceiverLinks()
+    {
+        foreach (ReceiverLink receiverLink in _receiverLinks)
+        {
+            receiverLink.Close();
+        }
+    }
+
     /// <inheritdoc />
     public async Task ProcessMessagesAsync(CancellationToken stoppingToken)
     {
+        using var s1 = _log.BeginScope(nameof(ProcessMessagesAsync)+$"-{_uniqueId}");
         // var host = new ContainerHost(_address);
         var serviceName = nameof(MessageService);
 
@@ -34,7 +47,7 @@ public class MessageService : IMessageService
                 {
                     _log.LogDebug("Starting to listening in receiver {receiverName}", receiverLink.Name);
                     Message? msg = await receiverLink.ReceiveAsync(IterationDelay);
-                    _log.LogDebug("Stopped in receiver {receiverName}", receiverLink.Name);
+                    _log.LogDebug("Stopped listening in receiver {receiverName} (DidGetMessage: {DidGetMessage})", receiverLink.Name, msg!=null);
                     
                     return new MessageInfo(receiverLink, msg);
                 })
@@ -64,14 +77,25 @@ public class MessageService : IMessageService
                 Task<MessageInfo>[] allTasks = receiveMsgTaskMap.Values.ToArray();
                 var completedTaskIdx = Task.WaitAny(allTasks);
                 _log.LogDebug("Removing completed task at idx {idx}", completedTaskIdx);
+                using var s2 = _log.BeginScope($"Task-{completedTaskIdx}");
                 MessageInfo receivedMsgInfo = allTasks[completedTaskIdx].Result;
 
                 ReceiverLink receiverLink = receivedMsgInfo.ReceiverLink;
+                
                 Message? msg = receivedMsgInfo.Message;
                 if (msg != null)
                 {
-                    _log.LogDebug("Got message in receiver link {receiverName}.", receiverLink.Name);
-                    OnProcessMessage?.Invoke(msg);
+                    _log.LogTrace("Firing events for message in receiver link {receiverName}.", receiverLink.Name);
+                    {
+                        using var s3 = _log.BeginScope("OnProcessMessage");
+                        _log.LogTrace("Invoking OnProcessMessage");
+                        OnProcessMessage?.Invoke(msg);
+                    }
+                    {
+                        using var s4 = _log.BeginScope("OnProcessMessageEx");
+                        _log.LogTrace("Invoking OnProcessMessageEx");
+                        OnProcessMessageEx?.Invoke(msg, receiverLink);
+                    }
                 }
 
                 receiveMsgTaskMap.TryRemove(receiverLink.Name, out _).EnsureTrue();
@@ -127,6 +151,7 @@ public class MessageService : IMessageService
     public static TimeSpan SleepPeriodAfterFetchedMessage { get; } = TimeSpan.FromMilliseconds(10);
 
     public event Action<Message>? OnProcessMessage;
+    public event Action<Message, ReceiverLink>? OnProcessMessageEx;
 
     public MessageService(ILogger<MessageService> log)
     {

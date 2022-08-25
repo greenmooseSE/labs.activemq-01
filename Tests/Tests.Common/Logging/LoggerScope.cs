@@ -23,14 +23,16 @@ public class LoggerScope : IDisposable
     public IReadOnlyList<LogEntry> AllLogs => _logEntries.OrderBy(l => l.TimestampOffset).ToList();
 
 
-    public void AddLog<TState>(string category,
+    public void AddLog<TState>(LoggingContextScope loggingContextScope,
+        string category,
         LogLevel logLevel,
         EventId eventId,
         TState state,
         Exception exception,
         Func<TState, Exception, string> formatter)
     {
-        var logEntry = new LogEntry(DateTimeOffset.Now - _started,
+        var logEntry = new LogEntry(loggingContextScope,
+            DateTimeOffset.Now - _started,
             category,
             logLevel,
             formatter(state, exception));

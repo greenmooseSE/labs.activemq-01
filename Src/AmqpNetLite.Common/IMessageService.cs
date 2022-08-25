@@ -6,6 +6,7 @@ public interface IMessageService : IDisposable
 
     Task ProcessMessagesAsync(CancellationToken stoppingToken);
     void SetQueueNames(IReadOnlyCollection<string> queueNames);
+    void SetQueueNames(IReadOnlyCollection<string> queueNames, int creditLimit);
 
     #endregion
 }

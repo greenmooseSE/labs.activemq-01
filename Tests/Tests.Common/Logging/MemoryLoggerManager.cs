@@ -1,8 +1,6 @@
-﻿using System;
-using System.Linq;
+﻿namespace Tests.Common.Logging;
 
-namespace Tests.Common.Logging;
-
+using System.Collections.Concurrent;
 using global::Common.EnsureExtension;
 using Microsoft.Extensions.Logging;
 
@@ -11,6 +9,20 @@ public class MemoryLoggerManager
     #region Public members
 
     public static MemoryLoggerManager Instance { get; } = new();
+
+    public IDisposable BeginScope<TState>(TState state, MemoryLogger memoryLogger)
+    {
+        var newIndex = Interlocked.Increment(ref _nestedScopeIndex) ;
+        // Console.WriteLine($"NEW INDEX: {newIndex}");
+        var scope = new LoggingContextScope(newIndex, state.ToString() ?? "", memoryLogger);
+        _scopeIndexMap.TryAdd(newIndex, scope).EnsureTrue();
+        return new LoggingScopeFake(() =>
+        {
+            var indexRemoved = Interlocked.Decrement(ref _nestedScopeIndex)+1;
+            // Console.WriteLine($"REMOVED INDEX: {indexRemoved}");
+            _scopeIndexMap.TryRemove(indexRemoved, out _).EnsureTrue();
+        });
+    }
 
     // public void Log(string category, LogLevel logLevel, string text)
     // {
@@ -42,7 +54,10 @@ public class MemoryLoggerManager
         Exception exception,
         Func<TState, Exception, string> formatter)
     {
-        _loggerScope.AddLog(category, logLevel, eventId, state, exception, formatter);
+        LoggingContextScope? contextScope=null;
+        _scopeIndexMap.TryGetValue(_nestedScopeIndex, out contextScope);
+        _loggerScope.EnsureNotNull()
+            .AddLog(contextScope, category, logLevel, eventId, state, exception, formatter);
     }
 
     public LoggerScope NewLogScope()
@@ -81,6 +96,9 @@ public class MemoryLoggerManager
     //     new ConcurrentDictionary<Guid, LoggerScope>();
 
     private LoggerScope? _loggerScope;
+    private int _nestedScopeIndex;
+
+    private readonly ConcurrentDictionary<int, LoggingContextScope> _scopeIndexMap = new();
 
     #endregion
 }
