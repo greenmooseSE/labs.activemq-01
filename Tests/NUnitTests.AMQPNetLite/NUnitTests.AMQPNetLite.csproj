@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\ActiveMqLabs01.Common\ActiveMqLabs01.Common.csproj" />
+    <ProjectReference Include="..\..\Src\AmqpNetLite.Common\AmqpNetLite.Common.csproj" />
+    <ProjectReference Include="..\Test.AMQPNetLite.Common\Test.AMQPNetLite.Common.csproj" />
+  </ItemGroup>
+
+</Project>

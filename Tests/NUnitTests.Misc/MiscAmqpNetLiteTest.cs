@@ -1,180 +1,15 @@
 ﻿namespace NUnitTests.Misc;
 
-using System;
-using System.Linq;
-using System.Text;
 using System.Transactions;
-using ActiveMQ.Artemis.Client;
 using Amqp;
-using Amqp.Framing;
+using FluentAssertions;
+using Nito.AsyncEx;
 using NUnit.Framework;
-using Tests.Common.EnsureExtension;
-using ArtemisNetClient = ActiveMQ.Artemis;
-using ConnectionFactory = ActiveMQ.Artemis.Client.ConnectionFactory;
-using IConnection = ActiveMQ.Artemis.Client.IConnection;
-using Message = Amqp.Message;
+using Test.AMQPNetLite.Common;
 
 [TestFixture]
-internal class MiscAmqpNetLiteTest : NUnitTest
+internal class MiscAmqpNetLiteTest : AmqpNetLiteTest
 {
-    [SetUp]
-    public async Task MiscAmqpNetLiteTestSetUp()
-    {
-        _topicName = $"{_addressPrefix}{DateTime.Now.ToString("o")}-{Guid.NewGuid()}"
-            .Replace(":","-").Replace("+","-");
-
-        LogDebug($"Creating topic {_topicName}.");
-
-        await using ITopologyManager? topologyManager = await _artemisConnection.CreateTopologyManagerAsync();
-        var address = _artemisConnection.Endpoint.ToString();
-        LogDebug($"Using address {address}.");
-
-       
-
-        await using IProducer? producer = await _artemisConnection.CreateProducerAsync(
-            new ProducerConfiguration
-            {
-                MessageDurabilityMode = DurabilityMode.Nondurable,
-                Address = _topicName,
-                RoutingType = RoutingType.Anycast
-            });
-        await topologyManager.CreateQueueAsync(new QueueConfiguration
-        {
-            Address = _topicName,
-            Name = $"Queue01-{_topicName}",
-            // RoutingType = RoutingType.Anycast,
-            Durable = false,
-            AutoDelete = true
-        });
-
-
-        _session = new Session(_connection);
-
-        _receiver = new ReceiverLink(_session, "test-receiver01", _topicName);
-        _sender = new SenderLink(_session, "test-sender01", _topicName);
-
-
-        //var producer = await _artemisConnection.CreateProducerAsync(new ProducerConfiguration()
-        //{
-        //    MessageDurabilityMode = DurabilityMode.Nondurable
-        //});
-    }
-
-    [TearDown]
-    public async Task MiscAmqpNetLiteTestTearDown()
-    {
-        bool queueWasDeleted = false;
-        try
-        {
-            await _receiver.CloseAsync();
-        }
-        catch (Amqp.AmqpException ex)
-        {
-            if (ex.Message.Contains("Queue was deleted"))
-            {
-                queueWasDeleted = true;
-            }
-        }
-
-        await _sender.CloseAsync();
-        await _session.CloseAsync();
-
-        if (_doDeleteAddressesUponTearDown)
-        {
-            await using ITopologyManager? topologyManager =
-                await _artemisConnection.CreateTopologyManagerAsync();
-            IReadOnlyList<string> addresses =
-                (await topologyManager.GetQueueNamesAsync()) ?? Array.Empty<string>();
-            if (!queueWasDeleted)
-            {
-                LogDebug($"Deleting {_topicName}");
-                await topologyManager.DeleteAddressAsync(_topicName, true);
-            }
-            // foreach (var address in addresses.Where(a => a.StartsWith(_addressPrefix)))
-            // {
-            //     //To avoid error AMQ229205: Address AutoTestQueue-7452c193-32f1-4853-9812-fad11ef6bc00 has bindings
-            //     try
-            //     {
-            //         // await topologyManager.DeleteQueueAsync(_topicName, removeConsumers:true, autoDeleteAddress:true);
-            //         await topologyManager.DeleteAddressAsync(address, true);
-            //     }
-            //     catch (Exception e)
-            //     {
-            //         LogDebug($"Swallowing exception '{e.Message}'.");
-            //     }
-            // }
-        }
-    }
-
-    private const string _addressPrefix = "AutoTestQueue-";
-    private const bool _doDeleteAddressesUponTearDown = true;
-
-    private Connection _connection = null!;
-    private string _topicName = "";
-    private Session _session = null!;
-    private ReceiverLink _receiver = null!;
-    private SenderLink _sender = null!;
-    private IConnection _artemisConnection = null!;
-
-    [OneTimeSetUp]
-    public void MiscAmqpLiteTestsSetUp()
-    {
-        var address = new Address("amqp://admin:admin@localhost:5672");
-
-        _connection = new Connection(address);
-        var connectionFactory = new ConnectionFactory();
-        Endpoint endpoint = Endpoint.Create("localhost", 5672, "admin", "admin").EnsureNotNull();
-        _artemisConnection = connectionFactory.CreateAsync(endpoint).Result;
-    }
-
-
-    [OneTimeTearDown]
-    public async Task MiscAmqpLiteTestsTearDown()
-    {
-        await _connection.CloseAsync();
-        await _artemisConnection.DisposeAsync();
-    }
-
-    private void SendMsg(string msg)
-    {
-        var message = new Message {BodySection = new Data {Binary = Encoding.UTF8.GetBytes(msg)}};
-        Assert.IsNull(message.Header);
-        //We don't want to keep msgs during restart
-        message.Header = new Header {Durable = false};
-        _sender.Send(message);
-    }
-
-
-    private string GetMsg()
-    {
-        var msgText = GetOptionalMsg().EnsureNotNull();
-        return msgText;
-    }
-
-    private string? GetOptionalMsg()
-    {
-        Message? message = GetOptionalMsgObj();
-        if (message == null)
-        {
-            return null;
-        }
-
-        var msgText = Encoding.UTF8.GetString((byte[])message.Body);
-        LogDebug($"Got message: {msgText}");
-        return msgText;
-    }
-
-    private Message? GetOptionalMsgObj()
-    {
-        Message? msg = _receiver.Receive(TimeSpan.FromMilliseconds(10));
-        if (msg == null)
-        {
-            return null;
-        }
-
-        return msg;
-    }
-
     [TestCase(100)]
     // [TestCase(1 * 1000)]
     // [TestCase(10 * 1000)]
@@ -194,25 +29,150 @@ internal class MiscAmqpNetLiteTest : NUnitTest
         }
     }
 
-    
-    [TestCase("AutoTestQueue-")]
-    [Explicit]
-    public async Task DeleteAllAddressesMatching(string adressPrefix)
+    [Test]
+    public void CanReceiveAMessageFromMultipleTopics()
     {
-        await using ITopologyManager? topologyManager = await _artemisConnection.CreateTopologyManagerAsync();
+        //Set up 2 queues
+        using var scope1 = AmqpTempQueueScope.Create("test-queue-01");
+        using var scope2 = AmqpTempQueueScope.Create("test-queue-02");
+        LogDebug($"Using queue topic: {scope1.TopicName}");
+        LogDebug($"Using queue topic: {scope2.TopicName}");
 
-        var addresses = topologyManager.GetAddressNamesAsync().Result;
-        foreach (var address in addresses)
+
+        //Set up 2 listeners separately for that queue (connection is singleton)
+        var listenerSession = new Session(scope1.AmqpNetLiteConnection);
+
+        var receiverLink1 = new ReceiverLink(listenerSession, "receiver01", scope1.TopicName);
+        var receiverLink2 = new ReceiverLink(listenerSession, "receiver02", scope2.TopicName);
+
+        var cancellationToken = new CancellationTokenSource();
+        cancellationToken.CancelAfter(TimeSpan.FromSeconds(1));
+
+        var receiver1Started = false;
+        var receiver2Started = false;
+
+        Task task1 = Task.Factory.Run(async () =>
         {
-            if (address.StartsWith(adressPrefix))
+            while (!cancellationToken.IsCancellationRequested)
             {
-                Console.WriteLine($"Deleting address '{address}'.");
-                topologyManager.DeleteAddressAsync(address, true).Wait();
+                LogDebug("Receiver1: Waiting for msg");
+                receiver1Started = true;
+                Message? msg = await receiverLink1.ReceiveAsync(TimeSpan.FromMilliseconds(100));
+                if (msg != null)
+                {
+                    var text = GetMsgText(msg);
+                    LogInfo($"Receiver1: Got message: {text}");
+                }
+
+                await Task.Delay(100);
             }
-            else
+        });
+        Task task2 = Task.Factory.Run(async () =>
+        {
+            while (!cancellationToken.IsCancellationRequested)
             {
-                Console.WriteLine($"Not matching address: {address}");
+                LogDebug("Receiver2: Waiting for msg");
+                receiver2Started = true;
+                Message? msg = await receiverLink2.ReceiveAsync(TimeSpan.FromMilliseconds(100));
+                if (msg != null)
+                {
+                    var text = GetMsgText(msg);
+                    LogInfo($"Receiver2: Got message: {text}");
+                }
+
+                await Task.Delay(100);
             }
+        });
+
+        while (!receiver2Started || !receiver1Started)
+        {
+            Thread.Sleep(10);
+        }
+
+        Message msg1 = CreateMessage("Message1");
+        Message msg2 = CreateMessage("Message2");
+        LogDebug("Sending msg1");
+        scope1.AmqpSenderLink.Send(msg1);
+        LogDebug("Sending msg2");
+        scope2.AmqpSenderLink.Send(msg2);
+
+        Task.WaitAll(task1, task2);
+    }
+
+    [Test]
+    public void CanReceiveMessageAfterItHasBeenSentInEarlierConnection()
+    {
+        using var scope1 = AmqpTempQueueScope.Create("test-queue-01");
+        var messageText = $"Test msg {Guid.NewGuid()}";
+        Message msg = CreateMessage(messageText);
+        GetMsgText(msg).Should().Be(messageText);
+
+        scope1.AmqpSenderLink.Send(msg);
+
+        var connection2 = new Connection(scope1.Address);
+        try
+        {
+            var session = new Session(connection2);
+            var receiverLink = new ReceiverLink(session, "receiver01", scope1.TopicName);
+
+            Message? receivedMsg = receiverLink.Receive(TimeSpan.FromMilliseconds(10));
+            receivedMsg.Should().NotBeNull();
+            GetMsgText(receivedMsg).Should().Be(messageText);
+        }
+        finally
+        {
+            connection2.Close();
+        }
+    }
+
+    [Test]
+    public void CanReceiveMessageAfterItHasBeenSentInSameConnectionButDifferentSession()
+    {
+        using var scope1 = AmqpTempQueueScope.Create("test-queue-01");
+        var messageText = $"Test msg {Guid.NewGuid()}";
+        Message msg = CreateMessage(messageText);
+        GetMsgText(msg).Should().Be(messageText);
+
+        scope1.AmqpSenderLink.Send(msg);
+
+        // var connection2 = new Connection(scope1.Address);
+        var session = new Session(scope1.AmqpNetLiteConnection);
+        try
+        {
+            var receiverLink = new ReceiverLink(session, "receiver01", scope1.TopicName);
+
+            Message? receivedMsg = receiverLink.Receive(TimeSpan.FromMilliseconds(10));
+            receivedMsg.Should().NotBeNull();
+            GetMsgText(receivedMsg).Should().Be(messageText);
+        }
+        finally
+        {
+            session.Close();
+        }
+    }
+
+    [Test]
+    public void CanReceiveMessageAfterItHasBeenSentInSameSession()
+    {
+        using var scope1 = AmqpTempQueueScope.Create("test-queue-01");
+        var messageText = $"Test msg {Guid.NewGuid()}";
+        Message msg = CreateMessage(messageText);
+        GetMsgText(msg).Should().Be(messageText);
+
+        scope1.AmqpSenderLink.Send(msg);
+
+        // var connection2 = new Connection(scope1.Address);
+        // Session session = new Session(scope1.AmqpNetLiteConnection);
+        var receiverLink = new ReceiverLink(scope1.AmqpSession, "receiver01", scope1.TopicName);
+        try
+        {
+            Message? receivedMsg = receiverLink.Receive(TimeSpan.FromMilliseconds(10));
+            receivedMsg.Should().NotBeNull();
+            GetMsgText(receivedMsg).Should().Be(messageText);
+        }
+        finally
+        {
+            receiverLink.Close();
         }
     }
 
@@ -226,6 +186,13 @@ internal class MiscAmqpNetLiteTest : NUnitTest
 
         var receivedMsg = GetMsg();
         StringAssert.Contains(msg, receivedMsg);
+    }
+
+    [Test]
+    [Explicit]
+    public void DeleteAllTestQueues()
+    {
+        ArtemisHelper.DeleteAllQueuesAsync(QueuePrefix).Wait();
     }
 
     [Test]
